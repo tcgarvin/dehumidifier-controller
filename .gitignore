@@ -1,0 +1,5 @@
+venv
+.env
+
+co2_readings.json
+__pycache__
