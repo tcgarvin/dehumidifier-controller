@@ -54,12 +54,12 @@ class CO2Trigger:
         threshold = int(mean(self.data) + stdev(self.data))
         is_high = last_co2 >= threshold
         check = ":heavy_multiplication_x:" if is_high else ":heavy_check_mark:"
-        self.console.log(f"{check} Current CO2eq/kWh ({last_co2:.1f}) should be less than threshold {threshold:.1f}")
+        self.console.log(f"{check} Current gCO2eq/kWh ({last_co2:.1f}) should be less than threshold {threshold:.1f}")
 
         return Decision(
             name="Carbon Cost",
-            criteria="Local carbon cost should be less than x̅ + σ",
-            units="CO2eq/kWh",
+            criteria="Carbon cost less than x̅ + σ",
+            units="gCO2eq/kWh",
             threshold=int(threshold),
             measurement=int(last_co2),
             decision=(not is_high)

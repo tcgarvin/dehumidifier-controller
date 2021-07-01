@@ -5,6 +5,8 @@ from os import getenv
 from pathlib import Path
 import requests
 from rich.console import Console
+from rich.live import Live
+from rich.table import Table
 from sense_energy import Senseable
 from time import sleep
 
@@ -22,9 +24,9 @@ class DeviceState(Enum):
 
 
 class Controller:
-    def __init__(self, co2_trigger:CO2Trigger, sense_client: Senseable, webhook_key:str, sense_device: str, console: Console):
+    def __init__(self, co2_trigger:CO2Trigger, sense_client: Senseable, webhook_key:str, sense_device: str, live: Live):
         self.sense_client = sense_client
-        self.console = console
+        self.live = live
         self.sense_device = sense_device
         self.device_state = DeviceState.UNKNOWN
         self.webhook_key = webhook_key
@@ -32,8 +34,8 @@ class Controller:
 
     def run(self):
         while(True):
-            with self.console.status("Fetching CO2 data"):
-                self.co2_trigger.update_data()
+            #with self.live.console.status("Fetching CO2 data"):
+            self.co2_trigger.update_data()
 
             decisions = [self.co2_trigger.decide(), self.decide_device()]
             dehumidifier_should_be_on = decisions[0].decision and decisions[1].decision
@@ -43,15 +45,16 @@ class Controller:
             co2_is_high = not decisions[0].decision
             if co2_is_high:
                 sleep_duration = 1800
-                self.console.log("CO2 is high. Will pause and check back in 30 minutes")
+                self.live.console.log("CO2 is high. Will pause and check back in 30 minutes")
 
+            live.update(self.generate_table(decisions), refresh=True)
             sleep(sleep_duration)
 
     
     def decide_device(self) -> Decision:
-        with self.console.status("Fetching Sense data"):
-            self.sense_client.update_realtime()
-            realtime_data = self.sense_client.get_realtime()
+        #with self.live.console.status("Fetching Sense data"):
+        self.sense_client.update_realtime()
+        realtime_data = self.sense_client.get_realtime()
 
         decision = Decision(
             name=self.sense_device,
@@ -70,13 +73,33 @@ class Controller:
             device_draw = device["w"]
             device_is_on = device_draw > DEVICE_DRAW_THRESHOLD
             check = ":heavy_multiplication_x:" if device_is_on else ":heavy_check_mark:"
-            self.console.log(f"{check} {device_name} ({device_draw:.1f} Watts) should be less than {DEVICE_DRAW_THRESHOLD} Watts")
+            self.live.console.log(f"{check} {device_name} ({device_draw:.1f} Watts) should be less than {DEVICE_DRAW_THRESHOLD} Watts")
             decision.measurement = device_draw
-            decision.decision = False
+            decision.decision = not device_is_on
             return decision
 
-        self.console.log(f":heavy_check_mark: {device_name} missing, inferred (0W) < {DEVICE_DRAW_THRESHOLD}W")
+        self.live.console.log(f":heavy_check_mark: {device_name} missing, inferred (0W) < {DEVICE_DRAW_THRESHOLD}W")
         return decision
+
+
+    def generate_table(self, decisions) -> Table:
+        result = Table(
+            "Item",
+            "Criteria",
+            "Threshold",
+            "Current Value",
+            "Go / No Go"
+        )
+        for decision in decisions:
+            result.add_row(
+                decision.name, 
+                decision.criteria, 
+                f"{decision.threshold} {decision.units}",
+                f"{decision.measurement} {decision.units}",
+                ":heavy_check_mark:" if decision.decision else ":heavy_multiplication_x:"
+            )
+
+        return result
 
 
     def update_device(self, on:bool):
@@ -95,24 +118,25 @@ class Controller:
             fire_update = True
 
         if fire_update:
-            with self.console.status(f"Emitting '{event}' to affect change"):
-                requests.get(webhook_url)
+            #with self.live.console.status(f"Emitting '{event}' to affect change"):
+            requests.get(webhook_url)
 
-            self.console.log(f"Dehumidifier should be {'on' if on else 'off'}, but was {self.device_state.value}, so fired event")
+            self.live.console.log(f"Dehumidifier should be {'on' if on else 'off'}, but was {self.device_state.value}, so fired event")
             self.device_state = next_state
 
 
 if __name__ == "__main__":
     load_dotenv()
 
-    console = Console()
-    sense_client = Senseable(getenv("SENSE_USERNAME"), getenv("SENSE_PASSWORD"))
+    with Live(Table(), auto_refresh=False) as live:
+        console = live.console
+        sense_client = Senseable(getenv("SENSE_USERNAME"), getenv("SENSE_PASSWORD"))
 
-    co2_trigger_data_path = Path("co2_readings.json")
-    co2_trigger = CO2Trigger(getenv("CO2SIGNAL_REGION"), getenv("CO2SIGNAL_KEY"), co2_trigger_data_path, console)
+        co2_trigger_data_path = Path("co2_readings.json")
+        co2_trigger = CO2Trigger(getenv("CO2SIGNAL_REGION"), getenv("CO2SIGNAL_KEY"), co2_trigger_data_path, console)
 
-    if co2_trigger_data_path.exists():
-        co2_trigger.load_data()
+        if co2_trigger_data_path.exists():
+            co2_trigger.load_data()
 
-    controller = Controller(co2_trigger, sense_client, getenv("WEBHOOK_KEY"), getenv("TRIGGER_DEVICE"), console)
-    controller.run()
+        controller = Controller(co2_trigger, sense_client, getenv("WEBHOOK_KEY"), getenv("TRIGGER_DEVICE"), live)
+        controller.run()
