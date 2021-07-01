@@ -6,6 +6,8 @@ from rich.console import Console
 from statistics import stdev, mean
 from time import monotonic
 
+from decision import Decision
+
 
 UPDATE_INTERVAL = 30 * 60  # 30 minutes
 DEQUE_SIZE = 24 * 7 * 2    # 2 readings an hour for a week.  One week of data
@@ -43,15 +45,22 @@ class CO2Trigger:
         with open(self.data_location, "w") as out_file:
             json.dump(list(self.data), out_file)
 
-    def is_co2_high(self):
+    def decide(self) -> Decision:
         if len(self.data) < 2:
             self.console.log(f":heavy_check_mark: Still initializing CO2 thresholds")
             return False
 
-        last_co2 = self.data[-1]
-        threshold = mean(self.data) + stdev(self.data)
+        last_co2 = int(self.data[-1])
+        threshold = int(mean(self.data) + stdev(self.data))
         is_high = last_co2 >= threshold
-        check = ":x:" if is_high else ":heavy_check_mark:"
+        check = ":heavy_multiplication_x:" if is_high else ":heavy_check_mark:"
         self.console.log(f"{check} Current CO2eq/kWh ({last_co2:.1f}) should be less than threshold {threshold:.1f}")
-        return is_high
-         
+
+        return Decision(
+            name="Carbon Cost",
+            criteria="Local carbon cost should be less than x̅ + σ",
+            units="CO2eq/kWh",
+            threshold=int(threshold),
+            measurement=int(last_co2),
+            decision=(not is_high)
+        )

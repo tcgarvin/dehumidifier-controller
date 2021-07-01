@@ -9,6 +9,7 @@ from sense_energy import Senseable
 from time import sleep
 
 from co2_trigger import CO2Trigger
+from decision import Decision
 
 
 DEVICE_DRAW_THRESHOLD = 50 # Watts
@@ -34,11 +35,12 @@ class Controller:
             with self.console.status("Fetching CO2 data"):
                 self.co2_trigger.update_data()
 
-            co2_is_high = self.co2_trigger.is_co2_high()
-            dehumidifier_should_be_on = not co2_is_high and not self.is_device_on()
+            decisions = [self.co2_trigger.decide(), self.decide_device()]
+            dehumidifier_should_be_on = decisions[0].decision and decisions[1].decision
             self.update_device(dehumidifier_should_be_on)
 
             sleep_duration = 120
+            co2_is_high = not decisions[0].decision
             if co2_is_high:
                 sleep_duration = 1800
                 self.console.log("CO2 is high. Will pause and check back in 30 minutes")
@@ -46,10 +48,19 @@ class Controller:
             sleep(sleep_duration)
 
     
-    def is_device_on(self):
+    def decide_device(self) -> Decision:
         with self.console.status("Fetching Sense data"):
             self.sense_client.update_realtime()
             realtime_data = self.sense_client.get_realtime()
+
+        decision = Decision(
+            name=self.sense_device,
+            criteria="Projector should be off",
+            units="W",
+            threshold=50,
+            measurement=0,
+            decision=True
+        )
 
         for device in realtime_data["devices"]:
             device_name = device["name"]
@@ -58,12 +69,14 @@ class Controller:
 
             device_draw = device["w"]
             device_is_on = device_draw > DEVICE_DRAW_THRESHOLD
-            check = ":x:" if device_is_on else ":heavy_check_mark:"
+            check = ":heavy_multiplication_x:" if device_is_on else ":heavy_check_mark:"
             self.console.log(f"{check} {device_name} ({device_draw:.1f} Watts) should be less than {DEVICE_DRAW_THRESHOLD} Watts")
-            return device_is_on
+            decision.measurement = device_draw
+            decision.decision = False
+            return decision
 
         self.console.log(f":heavy_check_mark: {device_name} missing, inferred (0W) < {DEVICE_DRAW_THRESHOLD}W")
-        return False
+        return decision
 
 
     def update_device(self, on:bool):
