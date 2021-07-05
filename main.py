@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 from sense_energy import Senseable
+from sense_energy.sense_exceptions import SenseAPITimeoutException
 from time import sleep
 
 from co2_trigger import CO2Trigger
@@ -52,10 +53,6 @@ class Controller:
 
     
     def decide_device(self) -> Decision:
-        #with self.live.console.status("Fetching Sense data"):
-        self.sense_client.update_realtime()
-        realtime_data = self.sense_client.get_realtime()
-
         decision = Decision(
             name=self.sense_device,
             criteria="Projector should be off",
@@ -64,6 +61,15 @@ class Controller:
             measurement=0,
             decision=True
         )
+
+        #with self.live.console.status("Fetching Sense data"):
+        try:
+            self.sense_client.update_realtime()
+            realtime_data = self.sense_client.get_realtime()
+        except SenseAPITimeoutException:
+            self.live.console.log(f"Transient Exception connecting to Sense API.  Reading as {device_name} off for now.")
+            return decision
+
 
         for device in realtime_data["devices"]:
             device_name = device["name"]
