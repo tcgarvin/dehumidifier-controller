@@ -1,15 +1,16 @@
-from co2_trigger import CO2Trigger
 from enum import Enum
-from dotenv import load_dotenv
 from os import getenv
 from pathlib import Path
 import requests
+import socket
+from time import sleep
+
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 from sense_energy import Senseable
 from sense_energy.sense_exceptions import SenseAPITimeoutException
-from time import sleep
 
 from co2_trigger import CO2Trigger
 from decision import Decision
@@ -66,8 +67,8 @@ class Controller:
         try:
             self.sense_client.update_realtime()
             realtime_data = self.sense_client.get_realtime()
-        except SenseAPITimeoutException:
-            self.live.console.log(f"Transient Exception connecting to Sense API.  Reading as {device_name} off for now.")
+        except (SenseAPITimeoutException, socket.timeout) as e:
+            self.live.console.log(f"Transient Exception connecting to Sense API.  Reading as {self.sense_device} off for now: {e}")
             return decision
 
 
