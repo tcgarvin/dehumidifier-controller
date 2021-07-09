@@ -85,7 +85,7 @@ class Controller:
             decision.decision = not device_is_on
             return decision
 
-        self.live.console.log(f":heavy_check_mark: {device_name} missing, inferred (0W) < {DEVICE_DRAW_THRESHOLD}W")
+        self.live.console.log(f":heavy_check_mark: {self.sense_device} missing, inferred (0W) < {DEVICE_DRAW_THRESHOLD}W")
         return decision
 
 

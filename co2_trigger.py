@@ -38,9 +38,15 @@ class CO2Trigger:
 
         #self.console.print(api_response.json())
 
-        json_response = api_response.json()
+        try:
+            json_response = api_response.json()
+        except JSONDecodeError as e:
+            self.console.log(f"Unexpected response (invalid json) from {api_response.code()} {api_response.text()}. Skipping CO2Signal update")
+            return
+
         if "data" not in json_response:
-            self.console.log(f"Unexpected response (no 'data' attribute): {json_response}")
+            self.console.log(f"Unexpected response (no 'data' attribute): {json_response}. Skipping CO2Signal update")
+            return
 
         co2eq = api_response.json()["data"]["carbonIntensity"]
 
