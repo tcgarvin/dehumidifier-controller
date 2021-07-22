@@ -10,7 +10,7 @@ from decision import Decision
 
 
 UPDATE_INTERVAL = 30 * 60  # 30 minutes
-DEQUE_SIZE = 24 * 7 * 2    # 2 readings an hour for a week.  One week of data
+DEQUE_SIZE = 36 * 2    # 2 readings an hour for a day and a half.
 
 
 class CO2Trigger:
@@ -44,8 +44,9 @@ class CO2Trigger:
             self.console.log(f"Unexpected response (invalid json) from {api_response.code()} {api_response.text()}. Skipping CO2Signal update")
             return
 
-        if "data" not in json_response:
-            self.console.log(f"Unexpected response (no 'data' attribute): {json_response}. Skipping CO2Signal update")
+        co2eq = json_response.get("data", {}).get("carbonIntensity", None)
+        if co2eq is None:
+            self.console.log(f"Unable to get carbon intensity from response: {json_response}. Skipping CO2Signal update")
             return
 
         co2eq = api_response.json()["data"]["carbonIntensity"]
